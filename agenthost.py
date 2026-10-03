@@ -111,7 +111,8 @@ class Agent:
         return {"name": self.name, "color": self.cfg.get("color", "#8a8a93"), "state": self.state,
                 "enabled": self.cfg.get("enabled", True), "sessionId": self.cfg.get("sessionId", ""),
                 "cwd": self.cfg.get("cwd", ""), "lastActivity": self.last_activity, "error": self.error,
-                "pendingPermissions": len(self.pending), "seq": self.seq}
+                "pendingPermissions": len(self.pending), "seq": self.seq,
+                "chrome": bool(self.cfg.get("chrome"))}
 
     # ---- history from the session transcript
     def load_history(self, limit=400):
@@ -156,7 +157,8 @@ class Agent:
             resume=self.cfg.get("sessionId") or None,
             setting_sources=["user", "project", "local"],
             can_use_tool=self._can_use_tool,
-            extra_args={"name": self.name},
+            # `--chrome` is how a terminal session got Claude in Chrome; per agent, from the registry.
+            extra_args={"name": self.name, **({"chrome": None} if self.cfg.get("chrome") else {})},
             # Screenshots and big tool results arrive as single JSON lines; the 1 MB default
             # ended an agent's stream ("JSON message exceeded maximum buffer size").
             max_buffer_size=256 * 1024 * 1024,
@@ -393,6 +395,15 @@ class Handler(BaseHTTPRequestHandler):
                     save_registry(reg)
                     AGENTS.pop(a.name, None)
                     return self._send(200, {"ok": True, "removed": a.name})
+                if act == "chrome":
+                    # Claude in Chrome on/off for this agent; takes effect by restarting its session.
+                    reg = load_registry()
+                    reg.setdefault(a.name, a.cfg)["chrome"] = bool(b.get("on"))
+                    a.cfg["chrome"] = bool(b.get("on"))
+                    save_registry(reg)
+                    run(a.stop())
+                    run(a.start())
+                    return self._send(200, a.info())
                 if act == "restart":
                     run(a.stop())
                     run(a.start())

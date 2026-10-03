@@ -67,7 +67,7 @@
 <body>
 <header>
   <span class="dot"></span><span class="name" id="name">agent</span><span class="state" id="state">…</span>
-  <span class="sp"><button id="bStop" title="Interrupt the current turn (Esc)">■ stop</button><button id="bRestart" title="Restart the session (history kept)">↻ restart</button></span>
+  <span class="sp"><button id="bStop" title="Interrupt the current turn (Esc)">■ stop</button><button id="bChrome" title="Claude in Chrome for this agent (restarts its session)">◎ chrome</button><button id="bRestart" title="Restart the session (history kept)">↻ restart</button></span>
 </header>
 <div id="log"></div>
 <footer>
@@ -152,6 +152,8 @@ function setInfo(i) {
   document.documentElement.style.setProperty("--c", i.color || "#ff6826");
   const st = $("#state"); st.textContent = i.terminal ? "in a terminal (read-only here)" : i.state + (i.pendingPermissions ? " · needs you" : "");
   st.className = "state " + i.state;
+  const bc = $("#bChrome"); bc.textContent = i.chrome ? "◉ chrome on" : "◎ chrome off";
+  bc.style.color = i.chrome ? "var(--c)" : ""; bc.style.display = i.terminal ? "none" : "";
   document.body.classList.toggle("busy", ["busy", "permission"].includes(i.state));
   $("#in").disabled = $("#send").disabled = !!i.terminal || !i.enabled;
   $("#hint").textContent = i.terminal ? "This agent still runs in its terminal; it moves here when migrated." : (i.enabled ? (i.cwd || "") + (i.sessionId ? " · session " + i.sessionId.slice(0, 8) : "") : "agent disabled");
@@ -220,6 +222,10 @@ $("#in").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey
 $("#send").onclick = () => send(false);
 $("#stopsend").onclick = () => send(true);
 $("#bStop").onclick = () => post("interrupt");
+$("#bChrome").onclick = () => {
+  const on = !(info && info.chrome);
+  if (confirm((on ? "Enable" : "Disable") + " Claude in Chrome for " + NAME + "? Its session restarts (history kept).")) post("chrome", { on });
+};
 $("#bRestart").onclick = () => { if (confirm("Restart " + NAME + "? Its history is kept.")) post("restart"); };
 document.addEventListener("keydown", e => { if (e.key === "Escape") post("interrupt"); });
 poll();
