@@ -56,6 +56,11 @@ def token():
 def db():
     conn = sqlite3.connect(DB_PATH, timeout=10)
     conn.row_factory = sqlite3.Row
+    # WAL + synchronous=NORMAL: a commit no longer waits for an fsync, which took 2.5-5 s per write
+    # while builds kept the disk busy (an inbox answer took 39 s to reach its agent). WAL keeps the
+    # database consistent; at worst the last commits before a power cut are lost.
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
     return conn
 
 

@@ -61,6 +61,11 @@ def save_settings(update):
 def _db():
     c = sqlite3.connect(DB_PATH, timeout=10)
     c.row_factory = sqlite3.Row
+    # WAL + synchronous=NORMAL: a commit no longer waits for an fsync, which took 2.5-5 s per write
+    # while builds kept the disk busy (an inbox answer took 39 s to reach its agent). WAL keeps the
+    # database consistent; at worst the last commits before a power cut are lost.
+    c.execute("PRAGMA journal_mode=WAL")
+    c.execute("PRAGMA synchronous=NORMAL")
     return c
 
 
