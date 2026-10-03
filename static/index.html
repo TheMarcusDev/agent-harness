@@ -1,0 +1,504 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0b0c">
+<title>Agent Harness</title>
+<style>
+  :root {
+    --bg: #0b0b0c; --panel: #111113; --panel2: #16161a; --line: #222228; --line2: #2c2c34;
+    --text: #e9e7e4; --dim: #8a8a93; --faint: #55555e;
+    --accent: #cd5019; --accent2: #ff6826; --ok: #4cc38a; --bad: #e5534b; --warn: #e2b340; --info: #5aa2ff;
+    --mono: "JetBrains Mono", "Cascadia Mono", Consolas, ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  body { font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .mono, .lbl, .chip, .tabs button, table, .meta { font-family: var(--mono); }
+  .lbl { font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--dim); }
+  .lbl b { color: var(--text); font-weight: 600; }
+  .strip { display: flex; align-items: center; gap: 18px; padding: 10px 18px; border-bottom: 1px solid var(--line);
+           font-family: var(--mono); font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--dim);
+           position: sticky; top: 0; background: rgba(11,11,12,.92); backdrop-filter: blur(6px); z-index: 10;
+           overflow-x: auto; white-space: nowrap; }
+  .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; background: var(--faint); }
+  .dot.ok { background: var(--ok); box-shadow: 0 0 8px var(--ok); } .dot.run { background: var(--accent2); box-shadow: 0 0 8px var(--accent2); }
+  .dot.bad { background: var(--bad); box-shadow: 0 0 8px var(--bad); } .dot.warn { background: var(--warn); }
+  .strip .sp { margin-left: auto; }
+  .grid { display: grid; grid-template-columns: 300px minmax(0, 1fr) 400px; min-height: calc(100vh - 41px); }
+  .col { padding: 18px; border-right: 1px solid var(--line); min-width: 0; }
+  .col:last-child { border-right: none; }
+  @media (max-width: 1150px) {
+    .grid { grid-template-columns: 1fr; }
+    .col { border-right: none; border-bottom: 1px solid var(--line); }
+    .needs { order: -2; } .centre { order: -1; }
+  }
+  h2.sec { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; font: 600 13px var(--mono);
+           letter-spacing: 2.5px; text-transform: uppercase; }
+  h2.sec .ico { color: var(--accent2); }
+  h2.sec .r { margin-left: auto; color: var(--faint); font-weight: 400; font-size: 11px; letter-spacing: 1px; }
+  section + section { margin-top: 26px; }
+  .clock { display: flex; align-items: baseline; gap: 6px; }
+  .clock .hm { font: 600 46px var(--mono); color: var(--accent2); letter-spacing: 1px; }
+  .clock .s { font: 500 18px var(--mono); color: var(--dim); }
+  .meter { margin: 10px 0; }
+  .meter .bar { height: 6px; background: var(--panel2); border-radius: 3px; overflow: hidden; margin-top: 4px; }
+  .meter .bar i { display: block; height: 100%; background: var(--accent); }
+  .meter .bar i.ok { background: var(--ok); } .meter .bar i.warn { background: var(--warn); } .meter .bar i.bad { background: var(--bad); }
+  .lockrow { display: flex; gap: 8px; align-items: flex-start; padding: 8px 0; border-bottom: 1px dashed var(--line); font-size: 13px; }
+  .lockrow .n { font-family: var(--mono); color: var(--dim); width: 58px; flex: none; text-transform: uppercase; font-size: 11px; padding-top: 2px; }
+  .lockrow .w { min-width: 0; }
+  .lockrow .t { font-family: var(--mono); font-size: 11px; color: var(--faint); }
+  .lockrow .t.stale { color: var(--warn); }
+  .tree { font-size: 12px; padding: 6px 0; border-bottom: 1px dashed var(--line); }
+  .tree .b { font-family: var(--mono); color: var(--text); word-break: break-all; }
+  .tree .s { color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .title { text-align: center; margin: 4px 0 14px; }
+  .title .big { font: 700 26px var(--mono); letter-spacing: 5px; }
+  .title .big span { color: var(--accent2); font-weight: 500; letter-spacing: 1px; font-family: system-ui, sans-serif; }
+  .title .sub { font: 11px var(--mono); letter-spacing: 3px; color: var(--dim); text-transform: uppercase; }
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; margin-bottom: 12px; }
+  .tabs button { background: var(--panel); border: 1px solid var(--line2); color: var(--dim); border-radius: 6px;
+                 padding: 7px 14px; font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; cursor: pointer; }
+  .tabs button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; margin-bottom: 10px; }
+  .chip { font-size: 11px; border: 1px solid var(--line2); border-radius: 5px; padding: 3px 8px; color: var(--dim); background: var(--panel); }
+  .chip i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; }
+  #orbit { width: 100%; max-width: 560px; max-height: 62vh; aspect-ratio: 1; display: block; margin: 0 auto; cursor: pointer; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  td, th { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--faint); font-weight: 400; letter-spacing: 1.5px; text-transform: uppercase; font-size: 10px; }
+  .st { font-family: var(--mono); font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; }
+  .st.working, .st.ok { color: var(--ok); } .st.blocked, .st.fail { color: var(--bad); }
+  .st.waiting, .st.run { color: var(--accent2); } .st.idle { color: var(--faint); }
+  .needcount { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+  .needcount .n { font: 700 54px var(--mono); color: var(--accent2); line-height: 1; }
+  .needcount .n.zero { color: var(--ok); }
+  .card { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 6px;
+          padding: 12px; margin: 10px 0; }
+  .card.urgent { box-shadow: inset 0 0 0 1px var(--bad); }
+  .card .who { display: flex; gap: 8px; align-items: center; font: 11px var(--mono); color: var(--dim); }
+  .card .who b { color: var(--text); font-weight: 600; font-family: system-ui, sans-serif; font-size: 14px; }
+  .card .who .age { margin-left: auto; color: var(--faint); }
+  .card h3 { margin: 6px 0; font-size: 15px; font-weight: 600; }
+  .card .body { white-space: pre-wrap; color: #cfcdca; margin: 6px 0; }
+  .media { display: grid; gap: 8px; margin: 8px 0; }
+  .media video, .media img { width: 100%; border-radius: 5px; background: #000; border: 1px solid var(--line); }
+  .media .cap { color: var(--faint); font: 11px var(--mono); word-break: break-all; }
+  .opts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .opts button { flex: 1 1 110px; min-height: 46px; border-radius: 6px; border: 1px solid var(--line2); background: var(--panel2);
+                 color: var(--text); font: 600 14px system-ui, sans-serif; cursor: pointer; }
+  .opts button.rec { box-shadow: inset 0 0 0 1px var(--accent2); }
+  .opts button.yes { background: #12291e; border-color: #1f5a3c; } .opts button.no { background: #2c1514; border-color: #6a2a27; }
+  .opts button:active { transform: scale(.98); }
+  .linkbtn { background: none; border: none; color: var(--faint); font: 12px var(--mono); padding: 6px 0 0; cursor: pointer; }
+  .note { width: 100%; margin-top: 8px; min-height: 56px; background: var(--bg); color: var(--text); border: 1px solid var(--line2);
+          border-radius: 6px; padding: 8px; font: inherit; display: none; }
+  .ev { display: grid; grid-template-columns: 46px 1fr auto; gap: 8px; padding: 7px 0; border-bottom: 1px dashed var(--line);
+        font-size: 12px; align-items: baseline; }
+  .ev .tm { font: 11px var(--mono); color: var(--faint); }
+  .ev .tx { min-width: 0; overflow-wrap: anywhere; }
+  .ev .tx b { font-weight: 600; font-family: var(--mono); font-size: 11px; }
+  .empty { color: var(--faint); font: 12px var(--mono); padding: 18px 0; text-align: center; letter-spacing: 1px; }
+  .answer { color: var(--ok); font-weight: 600; }
+  .acard { display: flex; align-items: center; gap: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+           padding: 9px 11px; margin: 8px 0; cursor: pointer; }
+  .acard:hover { border-color: var(--line2); background: var(--panel2); }
+  .acard .d { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+  .acard .nm { font: 600 13px var(--mono); letter-spacing: .5px; }
+  .acard .sub { font: 11px var(--mono); color: var(--faint); }
+  .acard .rt { margin-left: auto; text-align: right; }
+  .acard.off { opacity: .45; }
+  .acard .tgl { background: none; border: 1px solid var(--line2); color: var(--dim); border-radius: 5px; font: 10px var(--mono); padding: 2px 6px; cursor: pointer; margin-top: 3px; }
+</style>
+</head>
+<body>
+<div class="strip">
+  <span><i class="dot" id="dHarness"></i>harness</span>
+  <span><i class="dot" id="dGpu"></i><span id="tGpu">gpu</span></span>
+  <span><i class="dot" id="dBuild"></i><span id="tBuild">build</span></span>
+  <span><i class="dot" id="dGate"></i><span id="tGate">gate</span></span>
+  <span class="sp" id="tSync">sync —</span>
+</div>
+<div class="grid">
+  <div class="col">
+    <section>
+      <h2 class="sec"><span class="ico">◷</span>Today<span class="r" id="tDate"></span></h2>
+      <div class="clock"><span class="hm" id="cHM">--:--</span><span class="s" id="cS">:--</span></div>
+      <div class="lbl" id="cSub">local</div>
+    </section>
+    <section><h2 class="sec"><span class="ico">▣</span>Machine</h2><div id="machine"></div></section>
+    <section><h2 class="sec"><span class="ico">◔</span>Claude quota<span class="r" id="tQuota"></span></h2><div id="quota"></div></section>
+    <section><h2 class="sec"><span class="ico">⛓</span>Locks</h2><div id="locks"></div></section>
+    <section><h2 class="sec"><span class="ico">⑂</span>Worktrees<span class="r" id="nTrees"></span></h2><div id="trees"></div></section>
+  </div>
+  <div class="col centre">
+    <div class="title"><div class="big"><b id="cfgName">AGENT HARNESS</b> <span>Agents</span></div><div class="sub" id="cfgSub">Command Centre</div></div>
+    <div class="tabs" id="tabs">
+      <button data-v="orbit" class="on">Orbit</button><button data-v="board">Board</button>
+      <button data-v="builds">Queue</button><button data-v="timeline">Timeline</button><button data-v="history">Answered</button>
+    </div>
+    <div class="chips" id="legend"></div>
+    <div id="centre"></div>
+  </div>
+  <div class="col needs">
+    <section>
+      <h2 class="sec"><span class="ico">✉</span>Needs <b id="cfgOwner">you</b><span class="r">tap to answer</span></h2>
+      <div class="needcount"><div class="n" id="nNeed">0</div><div class="lbl" id="nNeedSub">open<br>decisions</div></div>
+      <div id="inbox"></div>
+    </section>
+    <section><h2 class="sec"><span class="ico">⚡</span>Activity<span class="r" id="nEv"></span></h2><div id="activity"></div></section>
+    <section><h2 class="sec"><span class="ico">◉</span>Agents<span class="r"><button class="linkbtn" id="addAgentBtn">+ add agent</button></span></h2>
+      <div id="addAgent" class="card" style="display:none">
+        <div class="lbl">New agent</div>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+          <input id="naName" placeholder="Name (letters, digits)" style="flex:1 1 140px;background:var(--bg);color:var(--text);border:1px solid var(--line2);border-radius:6px;padding:8px">
+          <input id="naColor" type="color" value="#5aa2ff" style="width:46px;height:38px;background:none;border:1px solid var(--line2);border-radius:6px">
+          <input id="naCwd" value="" style="flex:1 1 200px;background:var(--bg);color:var(--text);border:1px solid var(--line2);border-radius:6px;padding:8px;font:12px var(--mono)">
+        </div>
+        <div class="opts"><button class="yes" id="naCreate">Create and open</button><button id="naCancel">Cancel</button></div>
+      </div>
+      <div id="agents"></div></section>
+  </div>
+</div>
+<script>
+"use strict";
+// Agent names, colours and labels come from the server: the agent registry plus harness.config.json.
+let CFG = {}, COORD = "Reviewer", AGENTS = [], COLOR = {}, SHORT = {};
+const short = n => SHORT[n] || (String(n).match(/[A-Z0-9]/g) || [String(n)[0] || "?"]).join("").slice(0, 4).toUpperCase();
+function applyConfig() {
+  CFG = S.config || {}; COORD = CFG.coordinator || "Reviewer";
+  const cards = S.agentCards || [];
+  AGENTS = [COORD, ...cards.map(a => a.name).filter(n => n !== COORD)];
+  COLOR = Object.assign({ Owner: "#ffffff", NightMode: "#55555e" }, CFG.agentColors || {});
+  for (const a of cards) if (a.color) COLOR[a.name] = a.color;
+  if (!COLOR[COORD]) COLOR[COORD] = "#ff6826";
+  SHORT = Object.assign({ Owner: "YOU" }, CFG.agentShort || {});
+  $("#cfgName").textContent = (CFG.projectName || "Agent Harness").toUpperCase();
+  $("#cfgSub").textContent = CFG.subtitle || "";
+  $("#cfgOwner").textContent = CFG.ownerName || "you";
+  if (!$("#naCwd").value) $("#naCwd").value = CFG.defaultCwd || "";
+}
+const col = n => COLOR[n] || "#8a8a93";
+// The real owner behind a lock: harness jobs hold it as "H<job>-<Agent>", harness builds as "Harness:<Agent>".
+const owner = h => String(h || "").replace(/^H\d+-/, "").replace(/^Harness:/, "");
+const MONO = getComputedStyle(document.documentElement).getPropertyValue("--mono");
+let S = null, view = "orbit", busy = false, lastIds = null, focusAgent = null, anim = 0, nodes = [];
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const J = s => { try { return JSON.parse(s || "[]"); } catch { return []; } };
+const ago = t => { if (!t) return ""; const m = Math.round((Date.now() / 1000 - t) / 60);
+  return m < 1 ? "now" : m < 60 ? m + "m" : m < 1440 ? Math.round(m / 60) + "h" : Math.round(m / 1440) + "d"; };
+const hhmm = t => new Date(t * 1000).toTimeString().slice(0, 5);
+
+function tick() {
+  const d = new Date();
+  $("#cHM").textContent = d.toTimeString().slice(0, 5);
+  $("#cS").textContent = ":" + d.toTimeString().slice(6, 8);
+  $("#tDate").textContent = d.toLocaleDateString(undefined, { weekday: "short", day: "2-digit", month: "short" });
+  $("#cSub").textContent = Intl.DateTimeFormat().resolvedOptions().timeZone || "local";
+}
+setInterval(tick, 1000); tick();
+
+function meter(label, freeV, total, unit, lowWarn) {
+  const used = total ? Math.max(0, Math.min(1, 1 - freeV / total)) : 0;
+  const cls = freeV < lowWarn ? "bad" : used > .75 ? "warn" : "ok";
+  return `<div class="meter"><div class="lbl">${label} <b>${freeV}</b> / ${total} ${unit} free</div>
+          <div class="bar"><i class="${cls}" style="width:${(used * 100).toFixed(0)}%"></i></div></div>`;
+}
+function renderLeft() {
+  const s = S.system || {};
+  const procs = Object.entries(s.procs || {}).map(([k, v]) => `${esc(k.replace(".exe", ""))}×${v}`).join(" · ");
+  $("#machine").innerHTML = meter("Disk D:", s.diskFreeGB ?? 0, 448, "GB", 10) + meter("RAM", s.ramFreeGB ?? 0, s.ramTotalGB ?? 0, "GB", 4)
+    + meter("Commit", s.commitFreeGB ?? 0, s.commitTotalGB ?? 0, "GB", 8)
+    + `<div class="lbl" style="margin-top:8px">${procs || "no editor · blender · build"}</div>`;
+  const q = S.quota || {}, wins = q.windows || {}, names = { five_hour: "5-hour", seven_day: "Weekly", seven_day_opus: "Weekly Opus", seven_day_sonnet: "Weekly Sonnet" };
+  const resets = t => { if (!t) return ""; const m = Math.max(0, Math.round((t - Date.now() / 1000) / 60));
+    return m < 60 ? `resets in ${m} min` : m < 1440 ? `resets in ${Math.floor(m / 60)} h ${m % 60} min` : `resets ${new Date(t * 1000).toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" })}`; };
+  $("#quota").innerHTML = Object.keys(wins).length ? Object.entries(wins).map(([k, w]) => {
+      const u = Math.round((w.utilization || 0) * 100), cls = u >= 90 ? "bad" : u >= 70 ? "warn" : "ok";
+      return `<div class="meter"><div class="lbl">${names[k] || k} <b>${u}%</b> used · ${resets(w.resetsAt)}</div><div class="bar"><i class="${cls}" style="width:${u}%"></i></div></div>`;
+    }).join("") : `<div class="lbl">${q.error ? "quota probe failed: " + esc(q.error) : "waiting for the first reading"}</div>`;
+  $("#tQuota").textContent = q.updated ? "read " + ago(q.updated) + " ago" : "";
+  const locks = S.locks || [];
+  $("#locks").innerHTML = ["gpu", "build.1", "build.2"].map(n => {
+    const l = locks.find(x => x.lock === n);
+    return `<div class="lockrow"><span class="n">${n}</span><div class="w">${l
+      ? `<b style="color:${col(owner(l.holder))}">${esc(owner(l.holder))}</b>${l.holder !== owner(l.holder) ? ` <span class="st">via harness</span>` : ""}<div style="color:var(--dim)">${esc(l.what.split("|").slice(1, -1).join("|").trim())}</div>
+         <div class="t ${l.minutes > 20 && l.holder !== "NightMode" ? "stale" : ""}">held ${l.minutes} min</div>`
+      : `<span class="t">free</span>`}</div></div>`;
+  }).join("");
+  const trees = Array.isArray(S.worktrees) ? S.worktrees : [];
+  $("#nTrees").textContent = trees.length;
+  $("#trees").innerHTML = trees.map(t => `<div class="tree"><div class="b">${esc(t.branch || t.head)}
+      ${t.ahead ? ` <span class="st run">+${t.ahead}</span>` : ""}${t.dirty ? ` <span class="st waiting">${t.dirty} dirty</span>` : ""}</div>
+      <div class="s">${esc(t.path.split(/[\\/]/).pop())} · ${esc(t.age)} · ${esc(t.subject)}</div></div>`).join("");
+  const gpu = locks.find(l => l.lock === "gpu");
+  $("#dGpu").className = "dot " + (gpu ? (gpu.minutes > 20 ? "warn" : "run") : "ok");
+  $("#tGpu").textContent = gpu ? `gpu · ${owner(gpu.holder)} · ${gpu.minutes} min` : "gpu · free";
+  const builds = locks.filter(l => l.lock.startsWith("build") && l.holder !== "NightMode");
+  $("#dBuild").className = "dot " + (builds.length ? "run" : "ok");
+  $("#tBuild").textContent = builds.length ? `build · ${builds.map(b => owner(b.holder)).join(", ")}` : "build · idle";
+  const gate = (S.events || []).find(e => e.kind === "gate");
+  $("#dGate").className = "dot " + (gate ? ({ ok: "ok", fail: "bad", run: "run" }[gate.status] || "") : "");
+  $("#tGate").textContent = gate ? `gate · ${gate.text.slice(0, 48)}` : "gate · —";
+}
+
+function agentState(name) {
+  const a = (S.agents || []).find(x => x.name === name);
+  const holds = (S.locks || []).filter(l => owner(l.holder) === name).map(l => l.lock);
+  const asks = (S.inbox || []).filter(i => i.agent === name).length;
+  return { a, holds, asks, state: a ? a.state : "", task: a ? a.task : "" };
+}
+function drawOrbit() {
+  const c = $("#orbit"); if (!c || !S) return;
+  const dpr = window.devicePixelRatio || 1, w = c.clientWidth;
+  if (c.width !== Math.round(w * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(w * dpr); }
+  const g = c.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const cx = w / 2, cy = w / 2, R = w * 0.36, t = performance.now() / 1000, small = w < 480;
+  g.clearRect(0, 0, w, w);
+  for (let k = 1; k <= 4; k++) {
+    g.beginPath(); g.arc(cx, cy, R * k / 3.4, 0, Math.PI * 2);
+    g.strokeStyle = k === 3 ? "#2c2c34" : "#1a1a1f"; g.lineWidth = 1; g.setLineDash(k % 2 ? [2, 6] : []); g.stroke();
+  }
+  g.setLineDash([]);
+  for (let i = 0; i < 220; i++) {
+    const a = i * 2.39996, r = R * 1.15 * Math.sqrt((i + .5) / 220);
+    g.fillStyle = "rgba(120,120,135,.18)"; g.fillRect(cx + Math.cos(a) * r, cy + Math.sin(a) * r, 1.2, 1.2);
+  }
+  const hubs = { gpu: [cx, cy - R * 0.5], "build.1": [cx - R * 0.45, cy + R * 0.3], "build.2": [cx + R * 0.45, cy + R * 0.3] };
+  const others = AGENTS.filter(a => a !== COORD);
+  nodes = others.map((name, i) => {
+    const ang = -Math.PI / 2 + i * Math.PI * 2 / others.length;
+    return { name, x: cx + Math.cos(ang) * R, y: cy + Math.sin(ang) * R, ang };
+  });
+  for (const n of nodes) {
+    const st = agentState(n.name);
+    for (const h of st.holds) if (hubs[h]) {
+      const [hx, hy] = hubs[h];
+      const grd = g.createLinearGradient(n.x, n.y, hx, hy);
+      grd.addColorStop(0, col(n.name)); grd.addColorStop(1, "rgba(255,104,38,.15)");
+      g.strokeStyle = grd; g.lineWidth = 2; g.beginPath(); g.moveTo(n.x, n.y); g.lineTo(hx, hy); g.stroke();
+      const p = (t * .6 + n.ang) % 1;
+      g.fillStyle = "#fff"; g.beginPath(); g.arc(n.x + (hx - n.x) * p, n.y + (hy - n.y) * p, 2, 0, 7); g.fill();
+    }
+    if (st.asks) { g.strokeStyle = "rgba(255,104,38,.35)"; g.setLineDash([3, 5]); g.lineWidth = 1;
+      g.beginPath(); g.moveTo(n.x, n.y); g.lineTo(cx, cy); g.stroke(); g.setLineDash([]); }
+  }
+  g.textAlign = "center"; g.textBaseline = "middle";
+  for (const [name, [hx, hy]] of Object.entries(hubs)) {
+    const l = (S.locks || []).find(x => x.lock === name), held = l && l.holder !== "NightMode";
+    g.fillStyle = held ? "rgba(255,104,38,.12)" : "#111113"; g.strokeStyle = held ? "#ff6826" : (l ? "#55555e" : "#2c2c34");
+    g.lineWidth = 1.2; g.beginPath(); g.rect(hx - 40, hy - 11, 80, 22); g.fill(); g.stroke();
+    g.fillStyle = held ? "#ffb08a" : "#8a8a93"; g.font = "10px " + MONO;
+    g.fillText(l && !held ? name.toUpperCase() + " OFF" : name.toUpperCase(), hx, hy);
+    if (held) { g.fillStyle = col(owner(l.holder)); g.font = "9px " + MONO; g.fillText(owner(l.holder).toUpperCase(), hx, hy + 18); }
+  }
+  const pulse = 1 + Math.sin(t * 2) * .04;
+  g.save(); g.translate(cx, cy); g.scale(pulse, pulse);
+  g.beginPath(); for (let k = 0; k < 6; k++) { const a = Math.PI / 6 + k * Math.PI / 3; g.lineTo(Math.cos(a) * 20, Math.sin(a) * 20); }
+  g.closePath(); g.strokeStyle = col(COORD); g.lineWidth = 2.5; g.shadowColor = col(COORD); g.shadowBlur = 16; g.stroke(); g.restore();
+  g.shadowBlur = 0; g.fillStyle = col(COORD); g.font = "600 10px " + MONO; g.fillText(COORD.toUpperCase(), cx, cy + 34);
+  for (const n of nodes) {
+    const st = agentState(n.name), c0 = col(n.name);
+    const live = st.state === "working" || st.holds.length;
+    const r = 9 + (live ? Math.sin(t * 3 + n.ang) * 1.5 : 0);
+    g.beginPath(); g.arc(n.x, n.y, r + 7, 0, 7); g.strokeStyle = c0 + "40"; g.lineWidth = 1; g.stroke();
+    g.beginPath(); g.arc(n.x, n.y, r, 0, 7); g.fillStyle = live ? c0 : "#1b1b20"; g.strokeStyle = c0; g.lineWidth = 2;
+    if (live) { g.shadowColor = c0; g.shadowBlur = 14; } g.fill(); g.stroke(); g.shadowBlur = 0;
+    if (st.state === "blocked") { g.beginPath(); g.arc(n.x, n.y, r + 12, 0, 7); g.strokeStyle = "#e5534b"; g.lineWidth = 2; g.stroke(); }
+    if (st.asks) { g.fillStyle = "#ff6826"; g.beginPath(); g.arc(n.x + 12, n.y - 12, 8, 0, 7); g.fill();
+      g.fillStyle = "#fff"; g.font = "600 10px system-ui"; g.textAlign = "center"; g.fillText(String(st.asks), n.x + 12, n.y - 12); }
+    const lx = n.x + Math.cos(n.ang) * 26, ly = n.y + Math.sin(n.ang) * 26;
+    g.textAlign = Math.abs(Math.cos(n.ang)) < .3 ? "center" : Math.cos(n.ang) > 0 ? "left" : "right";
+    g.fillStyle = focusAgent === n.name ? "#fff" : "#cfcdca"; g.font = "600 11px " + MONO;
+    g.fillText(small ? short(n.name) : n.name.toUpperCase(), lx, ly);
+    if (st.task && !small) { g.fillStyle = "#8a8a93"; g.font = "10px system-ui"; g.fillText(st.task.slice(0, 30), lx, ly + 13); }
+  }
+  anim = requestAnimationFrame(drawOrbit);
+}
+function renderCentre() {
+  cancelAnimationFrame(anim);
+  const el = $("#centre");
+  $("#legend").innerHTML = view === "orbit" ? AGENTS.filter(a => a !== COORD).map(a =>
+    `<span class="chip"><i style="background:${col(a)}"></i>${short(a)}</span>`).join("") : "";
+  if (view === "orbit") {
+    el.innerHTML = `<canvas id="orbit"></canvas><div class="lbl" style="text-align:center;margin-top:6px">
+      filled = working or holding a lock · red ring = blocked · orange badge = asking you · tap a node</div><div id="agentCard"></div>`;
+    drawOrbit(); renderAgentCard();
+    $("#orbit").onclick = e => {
+      const r = e.target.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+      const hit = nodes.find(n => Math.hypot(n.x - x, n.y - y) < 24);
+      const w = e.target.clientWidth, core = Math.hypot(w / 2 - x, w / 2 - y) < 34;
+      focusAgent = hit ? hit.name : core ? COORD : null; renderAgentCard();
+    };
+  } else if (view === "board") {
+    el.innerHTML = `<table><tr><th>Agent</th><th>State</th><th>Task</th><th>Locks</th><th>Asks</th><th>Upd</th></tr>${
+      AGENTS.map(n => { const st = agentState(n); return `<tr><td style="color:${col(n)};font-weight:600">${esc(n)}</td>
+        <td class="st ${esc(st.state)}">${esc(st.state || "—")}</td><td>${esc(st.task)}${st.a && st.a.detail ? `<div style="color:var(--dim)">${esc(st.a.detail)}</div>` : ""}</td>
+        <td>${st.holds.join(", ")}</td><td>${st.asks || ""}</td><td>${st.a ? ago(st.a.updated) : ""}</td></tr>`; }).join("")}</table>`;
+  } else if (view === "builds") {
+    const bs = S.buildSettings || {}, dur = j => j.started ? (((j.finished || Date.now() / 1000) - j.started) / 60).toFixed(1) + "m" : "";
+    const kindOf = j => j.kind === "cmd" ? (j.gpu ? "capture" : "test") : "build";
+    el.innerHTML = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+        <span class="lbl">build workers</span>
+        <span class="tabs" style="margin:0"><button data-workers="1" class="${bs.buildWorkers == 1 ? "on" : ""}">1</button><button data-workers="2" class="${bs.buildWorkers == 2 ? "on" : ""}">2</button></span>
+        <span class="lbl">2nd build needs <b>${bs.minCommitGB} GB</b> commit free · now <b>${S.system?.commitFreeGB ?? "?"}</b></span></div>
+      <div class="lbl" style="margin-bottom:6px">builds run in the worker · captures wait in the FIFO gpu.lock · tests run straight away — all inside the harness, so the reaper can't kill them</div>
+      <table><tr><th>#</th><th>Kind</th><th>Agent</th><th>What</th><th>Status</th><th>Time</th><th></th></tr>${
+      (S.builds || []).map(j => `<tr data-build="${j.id}" style="cursor:pointer"><td>${j.id}</td><td class="st">${kindOf(j)}</td><td style="color:${col(j.agent)}">${esc(short(j.agent))}</td>
+        <td>${esc(j.tree.split(/[\\/]/).pop())} ${j.kind === "cmd" ? `<span style="color:var(--dim)">${esc(j.note || j.cmd.slice(0, 50))}</span>` : esc(J(j.configs).join("+")) + (j.target ? ` <span style="color:var(--dim)">${esc(j.target)}</span>` : "")}</td>
+        <td class="st ${({ok: "ok", fail: "fail", running: "run", queued: "idle", cancelled: "fail"})[j.status]}">${esc(j.status)}${j.status === "running" ? " · " + esc(j.step) : j.status === "queued" ? " #" + j.position : j.exit_code != null && j.status !== "ok" ? " (" + j.exit_code + ")" : ""}</td>
+        <td>${dur(j)}</td><td>${["queued", "running", "waiting"].includes(j.status) ? `<button class="linkbtn" data-cancel="${j.id}">cancel</button>` : ""}</td></tr>`).join("") || `<tr><td colspan=7 class="empty">Nothing queued yet.</td></tr>`}</table><pre id="buildLog" style="white-space:pre-wrap;font:11px var(--mono);color:var(--dim);margin-top:10px"></pre>`;
+    el.querySelectorAll("[data-workers]").forEach(b => b.onclick = async () => {
+      await fetch("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ buildWorkers: +b.dataset.workers }) });
+      lastBuildSig = ""; await load();
+    });
+    el.querySelectorAll("[data-cancel]").forEach(b => b.onclick = async ev => {
+      ev.stopPropagation();
+      if (!confirm("Cancel job #" + b.dataset.cancel + "?")) return;
+      await fetch("/api/build/cancel", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: +b.dataset.cancel }) });
+      lastBuildSig = ""; await load();
+    });
+    el.querySelectorAll("tr[data-build]").forEach(tr => tr.onclick = async () => {
+      const j = await (await fetch("/api/build?id=" + tr.dataset.build)).json();
+      $("#buildLog").textContent = `#${j.id} ${j.status} · ${j.log}
+` + (j.logTail || "(no log yet)");
+    });
+  } else if (view === "timeline") {
+    el.innerHTML = (S.events || []).slice(0, 20).map(evHtml).join("") || `<div class="empty">No events yet.</div>`;
+  } else {
+    el.innerHTML = (S.recent || []).slice(0, 6).map(it => `<div class="card" style="border-left-color:${col(it.agent)}">
+      <div class="who"><b>${esc(it.agent)}</b><span>${it.status === "delivered" ? "delivered" : "waiting for agent"}</span><span class="age">${ago(it.answered)}</span></div>
+      <h3>${esc(it.title)}</h3><div class="answer">→ ${esc(it.answer)}</div>${it.note ? `<div class="body">${esc(it.note)}</div>` : ""}</div>`).join("")
+      || `<div class="empty">No answers yet.</div>`;
+  }
+}
+function renderAgentCard() {
+  const el = $("#agentCard"); if (!el) return;
+  if (!focusAgent) { el.innerHTML = ""; return; }
+  const st = agentState(focusAgent), evs = (S.events || []).filter(e => e.agent === focusAgent).slice(0, 6);
+  el.innerHTML = `<div class="card" style="border-left-color:${col(focusAgent)}"><div class="who"><b>${esc(focusAgent)}</b>
+    <span class="st ${esc(st.state)}">${esc(st.state || "no status")}</span><span class="age">${st.a ? ago(st.a.updated) : ""}</span></div>
+    <h3>${esc(st.task || "—")}</h3>${st.a && st.a.detail ? `<div class="body">${esc(st.a.detail)}</div>` : ""}
+    ${st.holds.length ? `<div class="lbl">holds <b>${st.holds.join(", ")}</b></div>` : ""}${evs.map(evHtml).join("")}</div>`;
+}
+function itemHtml(it) {
+  const opts = J(it.options), cls = o => [o === it.recommend ? "rec" : "",
+    /^(yes|pass|approve|ok|go)$/i.test(o) ? "yes" : /^(no|fail|reject|stop)$/i.test(o) ? "no" : ""].join(" ");
+  const media = J(it.media).map(p => {
+    const u = "/media?p=" + encodeURIComponent(p), name = p.split(/[\\/]/).pop();
+    if (/\.(mp4|webm|mov)$/i.test(p)) return `<div><video src="${u}" controls playsinline preload="metadata"></video><div class="cap">${esc(name)}</div></div>`;
+    if (/\.(png|jpe?g|gif|webp)$/i.test(p)) return `<div><a href="${u}" target="_blank"><img src="${u}" loading="lazy"></a><div class="cap">${esc(name)}</div></div>`;
+    return `<div class="cap"><a href="${u}" target="_blank">${esc(name)}</a></div>`;
+  }).join("");
+  return `<div class="card ${it.priority >= 2 ? "urgent" : ""}" data-id="${it.id}" style="border-left-color:${col(it.agent)}">
+    <div class="who"><b>${esc(it.agent)}</b><span>${esc(it.kind)}</span><span class="age">${ago(it.created)}</span></div>
+    <h3>${esc(it.title)}</h3>${it.body ? `<div class="body">${esc(it.body)}</div>` : ""}
+    ${media ? `<div class="media">${media}</div>` : ""}
+    <div class="opts">${opts.map(o => `<button class="${cls(o)}" data-ans="${esc(o)}">${esc(o)}${o === it.recommend ? " ★" : ""}</button>`).join("")}</div>
+    <button class="linkbtn" data-note>+ note</button><textarea class="note" placeholder="Optional note, sent with your tap"></textarea></div>`;
+}
+function evHtml(e) {
+  return `<div class="ev"><span class="tm">${hhmm(e.t)}</span><span class="tx"><b style="color:${col(e.agent)}">${esc(short(e.agent))}</b>
+    ${esc(e.text)}</span><span class="st ${esc(e.status)}">${esc(e.status)}</span></div>`;
+}
+function renderRight(force) {
+  const n = S.inbox.length;
+  $("#nNeed").textContent = n; $("#nNeed").className = "n" + (n ? "" : " zero");
+  $("#nNeedSub").innerHTML = n ? "open<br>decisions" : "nothing<br>needs you";
+  document.title = (n ? `(${n}) ` : "") + (CFG.projectName || "Agent Harness") + " · Command Centre";
+  const ids = S.inbox.map(i => i.id).join(",");
+  const box = $("#inbox"), typing = document.activeElement && document.activeElement.tagName === "TEXTAREA" && box.contains(document.activeElement);
+  const playing = [...box.querySelectorAll("video")].some(v => !v.paused);
+  if (force || (ids !== lastIds && !typing && !playing)) {   // a redraw would reset videos mid-review
+    box.innerHTML = S.inbox.map(itemHtml).join("") || `<div class="empty">All clear ✓</div>`;
+    lastIds = ids;
+  }
+  const evs = (S.events || []).filter(e => e.kind !== "lock").slice(0, 3);
+  $("#nEv").textContent = evs.length ? "latest " + evs.length : "";
+  $("#activity").innerHTML = evs.map(evHtml).join("") || `<div class="empty">Quiet.</div>`;
+  renderAgents();
+}
+function agentColor(a) { return a.color || COLOR[a.name] || "#8a8a93"; }
+function renderAgents() {
+  const list = S.agentCards || [];
+  $("#agents").innerHTML = list.map(a => {
+    const st = a.terminal ? "terminal" : !a.enabled ? "disabled" : a.state + (a.pendingPermissions ? " · needs you" : "");
+    const cls = a.state === "busy" ? "run" : a.state === "permission" ? "waiting" : a.state === "error" ? "fail" : a.terminal ? "idle" : "ok";
+    return `<div class="acard ${a.enabled === false ? "off" : ""}" data-agent="${esc(a.name)}">
+      <span class="d" style="background:${agentColor(a)};box-shadow:0 0 8px ${agentColor(a)}"></span>
+      <div><div class="nm">${esc(a.name)}</div><div class="sub">${a.lastActivity ? ago(a.lastActivity) + " ago" : "—"}</div></div>
+      <div class="rt"><div class="st ${cls}">${esc(st)}</div>
+        ${a.terminal ? "" : `<button class="tgl" data-toggle="${esc(a.name)}" data-on="${a.enabled ? 1 : 0}">${a.enabled ? "disable" : "enable"}</button>`}
+        ${!a.terminal && !a.enabled ? `<button class="tgl" data-remove="${esc(a.name)}">remove</button>` : ""}</div></div>`;
+  }).join("") || `<div class="empty">No agents.</div>`;
+  $("#agents").querySelectorAll("[data-agent]").forEach(c => c.onclick = ev => {
+    const rm = ev.target.closest("[data-remove]");
+    if (rm) { ev.stopPropagation(); removeAgent(rm.dataset.remove); return; }
+    const t = ev.target.closest("[data-toggle]");
+    if (t) { ev.stopPropagation(); toggleAgent(t.dataset.toggle, t.dataset.on === "1"); return; }
+    openAgent(c.dataset.agent);
+  });
+}
+function openAgent(name) {
+  // A popup window: no tabs or toolbar, stays open on its own, can be pinned to another monitor.
+  window.open("/agent/" + encodeURIComponent(name), "agent-" + name, "popup,width=780,height=960");
+}
+async function removeAgent(name) {
+  if (!confirm("Remove " + name + " from the harness? Its transcript stays on disk.")) return;
+  await fetch(`/api/agent/${encodeURIComponent(name)}/remove`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+  load(true);
+}
+async function toggleAgent(name, on) {
+  if (on && !confirm("Disable " + name + "? Its session stops (history is kept; enable restarts it).")) return;
+  await fetch(`/api/agent/${encodeURIComponent(name)}/${on ? "disable" : "enable"}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+  load(true);
+}
+$("#addAgentBtn").onclick = () => { const f = $("#addAgent"); f.style.display = f.style.display === "none" ? "block" : "none"; $("#naName").focus(); };
+$("#naCancel").onclick = () => { $("#addAgent").style.display = "none"; };
+$("#naCreate").onclick = async () => {
+  const name = $("#naName").value.trim(); if (!name) return;
+  const r = await fetch("/api/agents", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, color: $("#naColor").value, cwd: $("#naCwd").value.trim() }) });
+  if (!r.ok) { alert("Not created: " + await r.text()); return; }
+  $("#addAgent").style.display = "none"; $("#naName").value = ""; openAgent(name); load(true);
+};
+$("#inbox").addEventListener("click", async e => {
+  const card = e.target.closest(".card[data-id]"); if (!card) return;
+  if (e.target.matches("[data-note]")) { const t = card.querySelector(".note"); t.style.display = "block"; t.focus(); return; }
+  const ans = e.target.dataset.ans;
+  if (ans === undefined || busy) return;
+  busy = true; card.style.opacity = .4;
+  try {
+    const r = await fetch("/api/answer", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: +card.dataset.id, answer: ans, note: card.querySelector(".note").value.trim() }) });
+    if (!r.ok) { alert("Not saved: " + await r.text()); card.style.opacity = 1; }
+  } finally { busy = false; if (document.activeElement) document.activeElement.blur(); await load(true); }
+});
+$("#tabs").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  view = b.dataset.v; document.querySelectorAll("#tabs button").forEach(x => x.classList.toggle("on", x === b));
+  renderCentre();
+});
+let lastSync = 0, lastBuildSig = "";
+async function load(force) {
+  try {
+    const r = await fetch("/api/state");
+    if (r.status === 401) { $("#inbox").innerHTML = `<div class="empty">Not signed in on this device: open the link with ?t=&lt;token&gt; once.</div>`; return; }
+    const first = !S; S = await r.json(); lastSync = Date.now(); applyConfig();
+    $("#dHarness").className = "dot ok";
+    renderLeft(); renderRight(force);
+    if (view === "builds") {
+      const sig = (S.builds || []).map(j => j.id + j.status + j.step).join() + (S.buildSettings || {}).buildWorkers;
+      if (sig !== lastBuildSig) { lastBuildSig = sig; renderCentre(); }
+    } else if (first || view !== "orbit") renderCentre(); else renderAgentCard();
+  } catch { $("#dHarness").className = "dot bad"; }
+}
+setInterval(() => { $("#tSync").textContent = lastSync ? "sync · " + Math.round((Date.now() - lastSync) / 1000) + "s" : "sync —"; }, 1000);
+load(); setInterval(load, 5000);
+let rz = 0; window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => { if (view === "orbit") renderCentre(); }, 150); });
+</script>
+</body>
+</html>

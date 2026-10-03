@@ -1,0 +1,17 @@
+# Local state and secrets -- never commit
+harness.token
+harness.config.json
+harness.json
+harness.db
+harness.db-*
+agents.json
+quota.json
+*.log
+build-logs/
+uploads/
+__pycache__/
+*.pyc
+# Personal working folders and backups
+reviewer/
+*.bak*
+static/index.v1.html

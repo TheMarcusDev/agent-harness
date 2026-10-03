@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0b0c">
+<title>Agent</title>
+<style>
+  :root { --bg: #0b0b0c; --panel: #121215; --panel2: #18181d; --line: #24242b; --text: #e9e7e4; --dim: #8a8a93; --faint: #55555e;
+          --accent: #cd5019; --accent2: #ff6826; --ok: #4cc38a; --bad: #e5534b; --warn: #e2b340;
+          --mono: "JetBrains Mono", "Cascadia Mono", Consolas, ui-monospace, monospace; --c: #ff6826; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 14.5px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  body { display: flex; flex-direction: column; }
+  header { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); background: #0f0f12; }
+  header .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c); box-shadow: 0 0 10px var(--c); }
+  header .name { font: 700 15px var(--mono); letter-spacing: 1.5px; text-transform: uppercase; }
+  header .state { font: 11px var(--mono); letter-spacing: 1.5px; text-transform: uppercase; color: var(--dim); }
+  header .state.busy { color: var(--accent2); } header .state.permission { color: var(--warn); } header .state.error { color: var(--bad); }
+  header .sp { margin-left: auto; display: flex; gap: 6px; }
+  header button { background: var(--panel2); border: 1px solid var(--line); color: var(--dim); border-radius: 6px; padding: 5px 10px; font: 12px var(--mono); cursor: pointer; }
+  header button:hover { color: var(--text); }
+  #log { flex: 1; overflow-y: auto; padding: 14px 14px 6px; }
+  .msg { max-width: 860px; margin: 0 auto 10px; }
+  .user .b { background: #1d1f26; border: 1px solid #2a2d38; border-radius: 10px; padding: 9px 12px; margin-left: 48px; white-space: pre-wrap; }
+  .user.peer .b { border-color: #3a3220; background: #1d1a12; }
+  .user .who { font: 10px var(--mono); color: var(--faint); text-align: right; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 2px; }
+  .assistant .b { padding: 2px 2px; }
+  .assistant .b p { margin: 0 0 8px; }
+  .b code { font: 12.5px var(--mono); background: #1b1b21; padding: 1px 5px; border-radius: 4px; }
+  .b pre { font: 12.5px var(--mono); background: #121217; border: 1px solid var(--line); padding: 10px; border-radius: 6px; overflow-x: auto; white-space: pre; }
+  .tool { font: 12px var(--mono); color: var(--dim); border-left: 2px solid var(--line); padding: 2px 0 2px 10px; cursor: pointer; }
+  .tool .n { color: var(--c); } .tool.err .n { color: var(--bad); }
+  .tool .x { display: none; white-space: pre-wrap; color: #b9b7b3; margin-top: 4px; max-height: 360px; overflow: auto; }
+  .tool.open .x { display: block; }
+  .thinking { font-size: 12.5px; color: var(--faint); font-style: italic; cursor: pointer; }
+  .thinking .x { display: none; white-space: pre-wrap; } .thinking.open .x { display: block; }
+  .system { text-align: center; font: 11px var(--mono); color: var(--faint); letter-spacing: 1px; }
+  .error { color: var(--bad); font: 12px var(--mono); }
+  .result { text-align: right; font: 10px var(--mono); color: var(--faint); }
+  .perm { border: 1px solid var(--warn); background: #1d1a10; border-radius: 8px; padding: 10px 12px; }
+  .perm .t { font-weight: 600; } .perm pre { font: 12px var(--mono); white-space: pre-wrap; color: #cfcdca; max-height: 220px; overflow: auto; }
+  .perm .opts { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .perm button { flex: 1 1 120px; min-height: 40px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel2); color: var(--text); font: 600 13px system-ui; cursor: pointer; }
+  .perm .yes { background: #12291e; border-color: #1f5a3c; } .perm .no { background: #2c1514; border-color: #6a2a27; }
+  .perm.done { border-color: var(--line); opacity: .6; }
+  .hist { opacity: .78; }
+  footer { border-top: 1px solid var(--line); padding: 10px 14px; background: #0f0f12; }
+  footer .row { max-width: 860px; margin: 0 auto; display: flex; gap: 8px; align-items: flex-end; }
+  textarea { flex: 1; resize: none; min-height: 44px; max-height: 220px; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font: inherit; }
+  textarea:focus { outline: none; border-color: var(--c); }
+  footer button { height: 44px; padding: 0 16px; border-radius: 8px; border: 1px solid var(--c); background: var(--c); color: #111; font: 700 13px system-ui; cursor: pointer; }
+  footer button.stopsend { background: #2c1514; border-color: var(--bad); color: #ffb4ae; display: none; }
+  body.busy footer button.stopsend { display: inline-block; }
+  body.busy header #bStop { background: #2c1514; border-color: var(--bad); color: #ffb4ae; }
+  footer .hint { max-width: 860px; margin: 4px auto 0; font: 10px var(--mono); color: var(--faint); letter-spacing: .5px; }
+  #att { max-width: 860px; margin: 0 auto 6px; display: none; gap: 8px; flex-wrap: wrap; }
+  #att.on { display: flex; }
+  #att .a { position: relative; } #att img { height: 64px; border-radius: 6px; border: 1px solid #2a2d38; display: block; }
+  #att .x { position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; border-radius: 9px; border: 0; background: #2c1514; color: #ffb4ae; font: 700 11px system-ui; cursor: pointer; padding: 0; }
+  footer button.clip { background: transparent; color: var(--dim, #9aa0ad); border-color: #2a2d38; padding: 0 12px; font-size: 16px; }
+  .user .b img { max-width: 100%; max-height: 360px; border-radius: 6px; display: block; margin-top: 6px; cursor: zoom-in; }
+  body.drag footer { outline: 2px dashed var(--c); outline-offset: -4px; }
+  .ro { text-align: center; color: var(--warn); font: 12px var(--mono); padding: 8px; }
+</style>
+</head>
+<body>
+<header>
+  <span class="dot"></span><span class="name" id="name">agent</span><span class="state" id="state">…</span>
+  <span class="sp"><button id="bStop" title="Interrupt the current turn (Esc)">■ stop</button><button id="bRestart" title="Restart the session (history kept)">↻ restart</button></span>
+</header>
+<div id="log"></div>
+<footer>
+  <div id="att"></div>
+  <div class="row"><input id="file" type="file" accept="image/*" multiple hidden><button id="clip" class="clip" title="Attach a screenshot (or paste / drop one)">📎</button><textarea id="in" rows="1" placeholder="Message the agent…  (Enter to send · Ctrl+Enter to stop and send now · Shift+Enter new line)"></textarea><button id="stopsend" class="stopsend" title="Stop what the agent is doing and send this now (Ctrl+Enter)">■ Stop &amp; send</button><button id="send">Send</button></div>
+  <div class="hint" id="hint"></div>
+</footer>
+<script>
+"use strict";
+const NAME = decodeURIComponent(location.pathname.split("/").pop());
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let since = 0, info = null, stick = true;
+document.title = NAME + " · Agent Harness";
+$("#name").textContent = NAME;
+
+function md(t) {
+  // Minimal markdown: fenced code, inline code, bold, paragraphs. Escaped first.
+  const parts = String(t || "").split(/```/);
+  return parts.map((p, i) => {
+    if (i % 2) return `<pre>${esc(p.replace(/^[a-zA-Z0-9]*\n/, ""))}</pre>`;
+    return esc(p).replace(/`([^`\n]+)`/g, "<code>$1</code>").replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>")
+      .split(/\n{2,}/).map(x => x.trim() ? `<p>${x.replace(/\n/g, "<br>")}</p>` : "").join("");
+  }).join("");
+}
+
+// A pasted screenshot travels as a line naming the saved file, which the agent opens with Read;
+// here that line is drawn as the image instead.
+const SHOT = /\[Screenshot: ([^\]\n]*?[\\/]uploads[\\/]([\w.-]+))[^\]\n]*\]/g;
+function withShots(t) {
+  return esc(t).replace(SHOT, (m, p, f) => `<img src="/uploads/${encodeURIComponent(f)}" alt="${f}">`);
+}
+
+const toolEls = {};
+function render(e) {
+  const log = $("#log"), h = e.history ? " hist" : "";
+  let el = document.createElement("div");
+  switch (e.type) {
+    case "user": {
+      const peer = e.origin && e.origin !== "human";
+      el.className = "msg user" + (peer ? " peer" : "") + h;
+      el.innerHTML = `${peer ? `<div class="who">${esc(e.origin)}</div>` : ""}<div class="b">${withShots(e.text)}</div>`;
+      el.querySelectorAll("img").forEach(i => i.onclick = () => window.open(i.src, "_blank")); break;
+    }
+    case "assistant": el.className = "msg assistant" + h; el.innerHTML = `<div class="b">${md(e.text)}</div>`; break;
+    case "thinking": el.className = "msg thinking" + h; el.innerHTML = `✳ thinking<div class="x">${esc(e.text)}</div>`; el.onclick = () => el.classList.toggle("open"); break;
+    case "tool_use": {
+      el.className = "msg tool" + h;
+      let inp = e.input || ""; try { const o = JSON.parse(inp); inp = o.command || o.file_path || o.pattern || o.description || o.to || inp; } catch {}
+      el.innerHTML = `<span class="n">${esc(e.name)}</span> ${esc(String(inp).slice(0, 160))}<div class="x">${esc(e.input)}</div>`;
+      el.onclick = () => el.classList.toggle("open"); toolEls[e.id] = el; break;
+    }
+    case "tool_result": {
+      const t = toolEls[e.id];
+      if (t) { if (e.error) t.classList.add("err"); t.querySelector(".x").textContent += "\n\n── result ──\n" + (e.text || ""); return; }
+      el.className = "msg tool" + (e.error ? " err" : "") + h; el.innerHTML = `<span class="n">result</span><div class="x">${esc(e.text)}</div>`;
+      el.onclick = () => el.classList.toggle("open"); break;
+    }
+    case "permission": {
+      el.className = "msg perm"; el.id = "perm-" + e.id;
+      el.innerHTML = `<div class="t">Allow ${esc(e.tool)}?</div>${e.title ? `<div>${esc(e.title)}</div>` : ""}<pre>${esc(e.input)}</pre>
+        <div class="opts"><button class="yes" data-a="1">Allow</button>${e.suggestions ? `<button data-a="2">Always allow</button>` : ""}<button class="no" data-a="0">Deny</button></div>`;
+      el.querySelectorAll("button").forEach(b => b.onclick = () => decide(e.id, b.dataset.a));
+      break;
+    }
+    case "permission_decided": { const p = document.getElementById("perm-" + e.id); if (p) { p.classList.add("done"); p.querySelector(".opts").innerHTML = `<span class="system">${e.allow ? "allowed" : "denied"}${e.always ? " (always)" : ""}</span>`; } return; }
+    case "result": el.className = "msg result"; el.textContent = e.error ? "turn ended with an error " + (e.text || "") : (e.cost != null ? `$${e.cost.toFixed(3)} · ${e.turns} steps` : ""); break;
+    case "error": el.className = "msg error"; el.textContent = e.text; break;
+    default: el.className = "msg system"; el.textContent = e.text || e.type;
+  }
+  log.appendChild(el);
+}
+
+async function post(path, body) {
+  const r = await fetch(`/api/agent/${encodeURIComponent(NAME)}/${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+  return r.ok;
+}
+async function decide(id, a) { await post("permission", { id, allow: a !== "0", always: a === "2" }); }
+
+function setInfo(i) {
+  info = i; if (!i) return;
+  document.documentElement.style.setProperty("--c", i.color || "#ff6826");
+  const st = $("#state"); st.textContent = i.terminal ? "in a terminal (read-only here)" : i.state + (i.pendingPermissions ? " · needs you" : "");
+  st.className = "state " + i.state;
+  document.body.classList.toggle("busy", ["busy", "permission"].includes(i.state));
+  $("#in").disabled = $("#send").disabled = !!i.terminal || !i.enabled;
+  $("#hint").textContent = i.terminal ? "This agent still runs in its terminal; it moves here when migrated." : (i.enabled ? (i.cwd || "") + (i.sessionId ? " · session " + i.sessionId.slice(0, 8) : "") : "agent disabled");
+}
+
+async function poll() {
+  while (true) {
+    try {
+      const r = await fetch(`/api/agent/${encodeURIComponent(NAME)}/events?since=${since}&wait=20`);
+      if (r.ok) {
+        const d = await r.json(); setInfo(d.info);
+        const log = $("#log"); stick = log.scrollTop + log.clientHeight >= log.scrollHeight - 40;
+        for (const e of d.events) { render(e); since = Math.max(since, e.seq); }
+        if (stick && d.events.length) log.scrollTop = log.scrollHeight;
+      } else await new Promise(r => setTimeout(r, 3000));
+    } catch { await new Promise(r => setTimeout(r, 3000)); }
+  }
+}
+
+let shots = [];   // {type, data(base64), url(object URL)}
+function drawAtt() {
+  const a = $("#att"); a.classList.toggle("on", shots.length > 0);
+  a.innerHTML = shots.map((s, i) => `<div class="a"><img src="${s.url}"><button class="x" data-i="${i}">×</button></div>`).join("");
+  a.querySelectorAll(".x").forEach(b => b.onclick = () => { URL.revokeObjectURL(shots[+b.dataset.i].url); shots.splice(+b.dataset.i, 1); drawAtt(); });
+}
+function addFiles(files) {
+  for (const f of files) {
+    if (!/^image\/(png|jpeg|webp|gif)$/.test(f.type)) continue;
+    const r = new FileReader();
+    r.onload = () => { shots.push({ type: f.type, data: String(r.result).split(",")[1], url: URL.createObjectURL(f) }); drawAtt(); };
+    r.readAsDataURL(f);
+  }
+}
+async function upload(s) {
+  const r = await fetch("/api/upload", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: s.type, data: s.data }) });
+  return r.ok ? (await r.json()).path : null;
+}
+$("#in").addEventListener("paste", e => {
+  const files = [...(e.clipboardData?.items || [])].filter(i => i.kind === "file").map(i => i.getAsFile()).filter(Boolean);
+  if (files.length) { e.preventDefault(); addFiles(files); }
+});
+$("#clip").onclick = () => $("#file").click();
+$("#file").onchange = e => { addFiles(e.target.files); e.target.value = ""; };
+document.addEventListener("dragover", e => { e.preventDefault(); document.body.classList.add("drag"); });
+document.addEventListener("dragleave", e => { if (!e.relatedTarget) document.body.classList.remove("drag"); });
+document.addEventListener("drop", e => { e.preventDefault(); document.body.classList.remove("drag"); addFiles(e.dataTransfer.files); });
+
+async function send(stopFirst) {
+  const t = $("#in"); let text = t.value.trim(); if (!text && !shots.length) return;
+  const pending = shots; shots = []; drawAtt();
+  for (const s of pending) {
+    const p = await upload(s); URL.revokeObjectURL(s.url);
+    if (p) text += `\n[Screenshot: ${p} -- open it with the Read tool]`;
+    else text += "\n[a screenshot failed to upload]";
+  }
+  text = text.trim();
+  t.value = ""; autosize(); stick = true;
+  // Stop & send: interrupt the current turn first, so the message is answered now rather than queued
+  // behind whatever the agent is in the middle of.
+  if (stopFirst && info && ["busy", "permission"].includes(info.state)) await post("interrupt");
+  await post("send", { text });
+}
+function autosize() { const t = $("#in"); t.style.height = "auto"; t.style.height = Math.min(220, t.scrollHeight) + "px"; }
+$("#in").addEventListener("input", autosize);
+$("#in").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(e.ctrlKey); } });
+$("#send").onclick = () => send(false);
+$("#stopsend").onclick = () => send(true);
+$("#bStop").onclick = () => post("interrupt");
+$("#bRestart").onclick = () => { if (confirm("Restart " + NAME + "? Its history is kept.")) post("restart"); };
+document.addEventListener("keydown", e => { if (e.key === "Escape") post("interrupt"); });
+poll();
+</script>
+</body>
+</html>

@@ -1,0 +1,27 @@
+{
+  "projectName": "My Project",
+  "subtitle": "Command Centre",
+  "ownerName": "Alex",
+  "coordinator": "Reviewer",
+  "defaultCwd": "C:/src/myproject",
+  "repo": "C:/src/myproject",
+  "mediaRoots": [
+    "C:/src/myproject/renders",
+    "C:/src/myproject/tests/out"
+  ],
+  "watchedProcesses": [
+    "MyGame.exe",
+    "blender.exe",
+    "MSBuild.exe"
+  ],
+  "agentColors": {
+    "Reviewer": "#ff6826",
+    "Builder": "#5aa2ff",
+    "Artist": "#c77dff"
+  },
+  "agentShort": {
+    "Reviewer": "REV",
+    "Builder": "BLD",
+    "Artist": "ART"
+  }
+}
