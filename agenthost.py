@@ -191,6 +191,12 @@ class Agent:
     async def send(self, text):
         if not self.client:
             await self.start()
+        # A message sent while the session is still connecting was lost (the first nudge after a host
+        # restart reached 1 of 10 agents): wait until the session is online.
+        for _ in range(600):
+            if self.state != "starting":
+                break
+            await asyncio.sleep(0.1)
         if not self.client:
             return
         self.emit("user", text=text)

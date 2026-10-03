@@ -164,7 +164,13 @@ async function poll() {
     try {
       const r = await fetch(`/api/agent/${encodeURIComponent(NAME)}/events?since=${since}&wait=20`);
       if (r.ok) {
-        const d = await r.json(); setInfo(d.info);
+        const d = await r.json();
+        // The agent host restarted: its event sequence starts over below where this window is, so
+        // every new event would be filtered out and the window would look frozen. Start over.
+        if (d.info && typeof d.info.seq === "number" && d.info.seq < since) {
+          since = 0; $("#log").innerHTML = ""; for (const k in toolEls) delete toolEls[k]; continue;
+        }
+        setInfo(d.info);
         const log = $("#log"); stick = log.scrollTop + log.clientHeight >= log.scrollHeight - 40;
         for (const e of d.events) { render(e); since = Math.max(since, e.seq); }
         if (stick && d.events.length) log.scrollTop = log.scrollHeight;
