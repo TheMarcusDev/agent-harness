@@ -132,17 +132,41 @@ def lock_watcher():
 _cache = {}
 
 
-def cached(key, seconds, fn):
-    hit = _cache.get(key)
-    now = time.time()
-    if hit and now - hit[0] < seconds:
-        return hit[1]
+_refreshing = set()
+_refresh_lock = threading.Lock()
+
+
+def _refresh(key, fn):
     try:
         val = fn()
     except Exception as e:  # a probe must never take the page down
         val = {"error": str(e)}
-    _cache[key] = (now, val)
-    return val
+    _cache[key] = (time.time(), val)
+    with _refresh_lock:
+        _refreshing.discard(key)
+
+
+def cached(key, seconds, fn):
+    """Stale-while-revalidate, single-flight: a stale value is returned AT ONCE and refreshed on a
+    background thread, never inside the request. The worktree probe runs git in every worktree
+    (~11 s with builds running), and computing it inline made /api/state time out for every
+    client -- harness.py included -- once a minute."""
+    hit = _cache.get(key)
+    now = time.time()
+    if hit and now - hit[0] < seconds:
+        return hit[1]
+    with _refresh_lock:
+        start = key not in _refreshing
+        if start:
+            _refreshing.add(key)
+    if hit:
+        if start:
+            threading.Thread(target=_refresh, args=(key, fn), daemon=True).start()
+        return hit[1]
+    if start:
+        _refresh(key, fn)           # first ever call: nothing stale to serve
+    hit = _cache.get(key)
+    return hit[1] if hit else []
 
 
 def _run(args, cwd=None, timeout=20):
@@ -187,7 +211,9 @@ def probe_worktrees():
         t["age"], _, t["subject"] = log.partition("|")
         ahead = _run(["git", "-C", t["path"], "rev-list", "--count", "main..HEAD"]).strip()
         t["ahead"] = int(ahead) if ahead.isdigit() else 0
-        dirty = _run(["git", "-C", t["path"], "status", "--porcelain", "-uno"]).strip()
+        # --no-optional-locks: a plain `git status` refreshes the index and takes index.lock, which
+        # collides with the agents' own commits in that worktree.
+        dirty = _run(["git", "--no-optional-locks", "-C", t["path"], "status", "--porcelain", "-uno"]).strip()
         t["dirty"] = len(dirty.splitlines()) if dirty else 0
     return trees
 

@@ -238,6 +238,10 @@ def _cancel_watcher():
 
 
 def _popen(jid, args, **kw):
+    # A host started with a hidden console and redirected stdout/stderr has an INVALID stdin handle;
+    # a job inheriting it breaks any Python child that calls subprocess without stdin= (WinError 6 in
+    # GetStdHandle -- run.py did). Give every job a real, empty stdin.
+    kw.setdefault("stdin", subprocess.DEVNULL)
     p = subprocess.Popen(args, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), **kw)
     with _lock:
         _procs[jid] = p
@@ -394,7 +398,7 @@ def _run(job, slot):
             out.write(f"\n===== {name}: {' '.join(cmd)}\n")
             out.flush()
             p = subprocess.Popen(cmd, cwd=job["tree"], env=env, stdout=out, stderr=subprocess.STDOUT,
-                                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                                 stdin=subprocess.DEVNULL, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
             with _lock:
                 _procs[jid] = p
             rc = p.wait()
