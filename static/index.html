@@ -144,7 +144,7 @@
   </div>
   <div class="col needs">
     <section>
-      <h2 class="sec"><span class="ico">✉</span>Needs <b id="cfgOwner">you</b><span class="r">tap to answer</span></h2>
+      <h2 class="sec"><span class="ico">✉</span>Needs <b id="cfgOwner">you</b><span class="r"><button class="linkbtn" id="sndBtn" title="Chime when a new decision arrives">🔔 sound</button></span></h2>
       <div class="needcount"><div class="n" id="nNeed">0</div><div class="lbl" id="nNeedSub">open<br>decisions</div></div>
       <div id="inbox"></div>
     </section>
@@ -404,8 +404,47 @@ function evHtml(e) {
   return `<div class="ev"><span class="tm">${hhmm(e.t)}</span><span class="tx"><b style="color:${col(e.agent)}">${esc(short(e.agent))}</b>
     ${esc(e.text)}</span><span class="st ${esc(e.status)}">${esc(e.status)}</span></div>`;
 }
+// ---- new-decision chime (Web Audio, no asset). Browsers keep audio muted until the page has had a
+// click or key press, so the context is created/resumed on the first gesture; the button says so.
+let audioCtx = null, seenInbox = null;
+let soundOn = (() => { try { return localStorage.getItem("harnessSound") !== "off"; } catch { return true; } })();
+function unlockAudio() {
+  try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); if (audioCtx.state === "suspended") audioCtx.resume(); } catch {}
+  drawSoundBtn();
+}
+function drawSoundBtn() {
+  const b = $("#sndBtn"); if (!b) return;
+  const locked = soundOn && (!audioCtx || audioCtx.state !== "running");
+  b.textContent = !soundOn ? "🔕 sound off" : locked ? "🔔 tap to enable sound" : "🔔 sound on";
+  b.style.color = !soundOn ? "var(--dim)" : locked ? "var(--warn, #e2b340)" : "";
+}
+function chime() {
+  if (!soundOn) return;
+  try { navigator.vibrate && navigator.vibrate([120, 60, 120]); } catch {}
+  if (!audioCtx || audioCtx.state !== "running") return;
+  const t0 = audioCtx.currentTime;
+  [[880, 0], [1318.5, 0.16]].forEach(([f, dt]) => {
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = "sine"; o.frequency.value = f;
+    g.gain.setValueAtTime(0.0001, t0 + dt); g.gain.exponentialRampToValueAtTime(0.25, t0 + dt + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dt + 0.45);
+    o.connect(g).connect(audioCtx.destination); o.start(t0 + dt); o.stop(t0 + dt + 0.5);
+  });
+}
+document.addEventListener("pointerdown", unlockAudio, { once: false, passive: true });
+document.addEventListener("keydown", unlockAudio, { passive: true });
+document.addEventListener("click", e => {
+  if (e.target.id !== "sndBtn") return;
+  soundOn = !soundOn; try { localStorage.setItem("harnessSound", soundOn ? "on" : "off"); } catch {}
+  unlockAudio(); if (soundOn) setTimeout(chime, 50);
+});
+
 function renderRight(force) {
   const n = S.inbox.length;
+  const cur = S.inbox.map(i => i.id);
+  if (seenInbox && cur.some(id => !seenInbox.has(id))) chime();   // not on first load: only NEW items
+  seenInbox = new Set(cur);
+  drawSoundBtn();
   $("#nNeed").textContent = n; $("#nNeed").className = "n" + (n ? "" : " zero");
   $("#nNeedSub").innerHTML = n ? "open<br>decisions" : "nothing<br>needs you";
   document.title = (n ? `(${n}) ` : "") + (CFG.projectName || "Agent Harness") + " · Command Centre";
