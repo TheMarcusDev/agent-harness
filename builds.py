@@ -235,11 +235,61 @@ def _cancel_watcher():
                 live = dict(_procs)
             for jid, p in live.items():
                 if _status(jid) == 'cancelled':
-                    subprocess.run(['taskkill', '/F', '/T', '/PID', str(p.pid)], capture_output=True)
+                    _kill(jid, p)
             _free_dead_harness_lock()
         except Exception:
             pass
         time.sleep(2)
+
+
+# ---- Windows Job Objects: a cancel must end EVERY descendant. `taskkill /T` walks parent pids, so it
+# misses a grandchild whose parent already exited (bash -> python -> PXLForge.exe): a cancelled
+# capture's exe ran on into the owner's UE slot. A job is created suspended, put in a Job Object
+# (which every descendant inherits), then resumed; cancel terminates the whole job.
+_K32 = ctypes.WinDLL("kernel32", use_last_error=True)
+_K32.CreateJobObjectW.restype = ctypes.c_void_p
+_K32.CreateJobObjectW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p]
+_K32.AssignProcessToJobObject.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+_K32.TerminateJobObject.argtypes = [ctypes.c_void_p, ctypes.c_uint]
+_K32.CloseHandle.argtypes = [ctypes.c_void_p]
+_NT = ctypes.WinDLL("ntdll")
+_NT.NtResumeProcess.argtypes = [ctypes.c_void_p]
+_jobs = {}   # job id -> Job Object handle
+CREATE_SUSPENDED = 0x4
+
+
+def _spawn(jid, args, **kw):
+    kw["creationflags"] = kw.get("creationflags", 0) | getattr(subprocess, "CREATE_NO_WINDOW", 0) | CREATE_SUSPENDED
+    p = subprocess.Popen(args, **kw)
+    job = _K32.CreateJobObjectW(None, None)
+    if job and _K32.AssignProcessToJobObject(job, int(p._handle)):
+        with _lock:
+            _jobs[jid] = job
+    elif job:
+        _K32.CloseHandle(job)
+    _NT.NtResumeProcess(int(p._handle))
+    with _lock:
+        _procs[jid] = p
+    return p
+
+
+def _reap(jid, p):
+    rc = p.wait()
+    with _lock:
+        _procs.pop(jid, None)
+        job = _jobs.pop(jid, None)
+    if job:
+        _K32.CloseHandle(job)
+    return rc
+
+
+def _kill(jid, p):
+    with _lock:
+        job = _jobs.get(jid)
+    if job:
+        _K32.TerminateJobObject(job, 1)
+    subprocess.run(['taskkill', '/F', '/T', '/PID', str(p.pid)], capture_output=True,
+                   creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
 
 
 def _popen(jid, args, **kw):
@@ -247,13 +297,7 @@ def _popen(jid, args, **kw):
     # a job inheriting it breaks any Python child that calls subprocess without stdin= (WinError 6 in
     # GetStdHandle -- run.py did). Give every job a real, empty stdin.
     kw.setdefault("stdin", subprocess.DEVNULL)
-    p = subprocess.Popen(args, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), **kw)
-    with _lock:
-        _procs[jid] = p
-    rc = p.wait()
-    with _lock:
-        _procs.pop(jid, None)
-    return rc
+    return _reap(jid, _spawn(jid, args, **kw))
 
 
 def _status(jid):
@@ -402,13 +446,9 @@ def _run(job, slot):
             _exec("UPDATE builds SET step=? WHERE id=?", (name, jid))
             out.write(f"\n===== {name}: {' '.join(cmd)}\n")
             out.flush()
-            p = subprocess.Popen(cmd, cwd=job["tree"], env=env, stdout=out, stderr=subprocess.STDOUT,
-                                 stdin=subprocess.DEVNULL, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-            with _lock:
-                _procs[jid] = p
-            rc = p.wait()
-            with _lock:
-                _procs.pop(jid, None)
+            p = _spawn(jid, cmd, cwd=job["tree"], env=env, stdout=out, stderr=subprocess.STDOUT,
+                       stdin=subprocess.DEVNULL)
+            rc = _reap(jid, p)
             out.write(f"===== {name}: exit {rc}\n")
             if rc != 0:
                 break
